@@ -1,6 +1,7 @@
 import { computed } from '@ember/object';
-import { reads, equal, not } from '@ember/object/computed';
+import { reads, equal, not, notEmpty } from '@ember/object/computed';
 import ArrayProxy from '@ember/array/proxy';
+import Evented from '@ember/object/evented';
 import { assert } from '@ember/debug';
 import { task } from 'ember-concurrency';
 import bindGenerator from 'travis/utils/bind-generator';
@@ -56,17 +57,28 @@ export default function dynamicQuery(...args) {
   return computed(...args);
 }
 
-const DynamicQuery = ArrayProxy.extend({
+export const EVENTS = {
+  PAGE_CHANGED: 'page-changed',
+  FILTER_CHANGED: 'filter-changed'
+};
+
+const DynamicQuery = ArrayProxy.extend(Evented, {
   task: null,
   promise: null,
 
   page: 1,
-  filter: '',
+  filterTerm: '',
 
   pagination: null,
 
   isLoading: reads('task.isRunning'),
-  isEmpty: equal('length', 0),
+  isNotLoading: not('isLoading'),
+
+  isFiltering: notEmpty('filterTerm'),
+  isNotFiltering: not('isFiltering'),
+
+  isEmpty: equal('total', 0),
+  isNotEmpty: not('isEmpty'),
 
   hasNextPage: not('pagination.isLast'),
   hasPreviousPage: not('pagination.isFirst'),
@@ -94,9 +106,9 @@ const DynamicQuery = ArrayProxy.extend({
     return page === currentPage ? promise : this.reload({ page });
   },
 
-  applyFilter(filter = '') {
+  applyFilter(filterTerm = '') {
     const page = 1;
-    return this.reload({ filter, page });
+    return this.reload({ filterTerm, page });
   },
 
   load(options) {
@@ -106,9 +118,9 @@ const DynamicQuery = ArrayProxy.extend({
   reload(options) {
     this.applyOptions(options);
 
-    const { page, filter } = this;
+    const { page, filterTerm } = this;
 
-    this.promise = this.task.perform({ page, filter })
+    this.promise = this.task.perform({ page, filter: filterTerm })
       .then((result = []) => {
         this.set('pagination', result.pagination);
         this.setObjects(result.toArray());
@@ -118,12 +130,16 @@ const DynamicQuery = ArrayProxy.extend({
     return this.promise;
   },
 
-  applyOptions({ page, filter } = {}) {
-    if (page !== undefined)
+  applyOptions({ page, filterTerm } = {}) {
+    if (page !== undefined && page !== this.currentPage) {
       this.set('page', page);
+      this.trigger(EVENTS.PAGE_CHANGED, page);
+    }
 
-    if (filter !== undefined)
-      this.set('filter', filter);
+    if (filterTerm !== undefined && filterTerm !== this.filterTerm) {
+      this.set('filterTerm', filterTerm);
+      this.trigger(EVENTS.FILTER_CHANGED, filterTerm);
+    }
   }
 
 });

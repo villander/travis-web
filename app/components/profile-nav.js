@@ -12,15 +12,19 @@ export default Component.extend({
   accounts: service(),
   features: service(),
 
-  activeModel: null,
-  model: reads('activeModel'),
-
   user: reads('accounts.user'),
   organizations: reads('accounts.organizations'),
+
+  activeModel: null,
+  model: reads('activeModel'),
 
   accountName: or('model.name', 'model.login'),
   billingUrl: or('model.subscription.billingUrl', 'model.billingUrl'),
 
+  reposToMigrate: reads('model.githubAppsRepositoriesOnOrg'),
+
+  showMigrateTab: and('features.proVersion', 'user.allowMigration'),
+  showMigrateBadge: or('reposToMigrate.isNotEmpty', 'reposToMigrate.isFiltering'),
   showSubscriptionStatusBanner: and('checkSubscriptionStatus', 'model.subscriptionError'),
   showMigrationBetaBanner: not('features.proVersion'),
 
@@ -35,8 +39,7 @@ export default Component.extend({
   },
 
   checkSubscriptionStatus: computed('features.enterpriseVersion', function () {
-    let enterprise = this.get('features.enterpriseVersion');
-    return !enterprise && !!billingEndpoint;
+    return !this.features.get('enterpriseVersion') && !!billingEndpoint;
   }),
 
 });
